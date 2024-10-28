@@ -3,7 +3,7 @@
 
 <head>
   <title>MHS Penyalin Kitab</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.js"></script>
   <style>
     body {
@@ -46,19 +46,16 @@
       margin-top: 16px;
       background: #f8fafc;
       max-height: calc(100vh - 160px);
-      /* Adjusted for header and padding */
       overflow-y: auto;
-      /* Ensure scroll if content overflows */
     }
-    
-    #pdfContainer {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    overflow-y: auto;
-    max-height: 80vh; /* Ubah sesuai kebutuhan */
-}
 
+    #pdfContainer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow-y: auto;
+      max-height: calc(100vh - 200px);
+    }
 
     .no-pdf {
       text-align: center;
@@ -121,7 +118,6 @@
     .form-group input[id="publicationYear"],
     .form-group input[id="publicationYearHijri"] {
       width: 60px;
-      /* Adjust width for 3-digit input */
     }
 
     .controls {
@@ -218,7 +214,7 @@
   <div class="container">
     <div class="pdf-viewer" id="pdfViewer">
       <div class="file-input-container">
-        <input type="file" id="pdfFile" accept="application/pdf" onchange="loadPDF(this.files[0])">
+        <input type="file" id="pdfFile" accept="application/pdf">
         <div class="zoom-controls">
           <button class="icon-button" onclick="zoomIn()" title="Zoom In">
             +
@@ -297,7 +293,6 @@
                   <label for="page">Halaman</label>
                   <input type="text" id="page" name="page" maxlength="4">
                 </div>
-                
               </div>
             </div>
           </form>
@@ -307,34 +302,35 @@
           Ekspor
         </button>
       </div>
-      <textarea id="editor"></textarea>
+      <textarea id="texteditor"></textarea>
       <div id="status"></div>
     </div>
   </div>
 
   <script>
-    // Initialize Lucide icons after DOM is loaded
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.worker.min.js';
+
     document.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
     });
-  
-    // Zoom functions
+
     let scale = 1;
-  
+    let pdfDoc = null;
+
     function zoomIn() {
       scale += 0.1;
       renderPDF();
     }
-  
+
     function zoomOut() {
       scale -= 0.1;
       renderPDF();
     }
-  
+
     async function renderPDF() {
       const pdfContainer = document.getElementById('pdfContainer');
-      pdfContainer.innerHTML = ''; // Clear previous content
-  
+      pdfContainer.innerHTML = '';
+
       if (pdfDoc) {
         for (let i = 1; i <= pdfDoc.numPages; i++) {
           try {
@@ -344,12 +340,12 @@
             const context = canvas.getContext('2d');
             canvas.height = viewport.height;
             canvas.width = viewport.width;
-  
+
             const renderContext = {
               canvasContext: context,
               viewport: viewport
             };
-  
+
             await page.render(renderContext).promise;
             pdfContainer.appendChild(canvas);
           } catch (error) {
@@ -358,207 +354,94 @@
         }
       }
     }
-  
-    // PDF.js initialization
-    let pdfDoc = null;
-  
+
     function loadPDF(file) {
-      // Clear autosave when a new file is uploaded
       localStorage.removeItem('metadata');
-  
+      updateStatus('Loading PDF...');
+
       const fileReader = new FileReader();
       fileReader.onload = function(event) {
         const typedArray = new Uint8Array(event.target.result);
         pdfjsLib.getDocument(typedArray).promise.then(pdf => {
           pdfDoc = pdf;
           renderPDF();
+          updateStatus('PDF loaded successfully');
+        }).catch(error => {
+          console.error('Error loading PDF:', error);
+          updateStatus('Error loading PDF. Please try again.');
         });
       };
       fileReader.readAsArrayBuffer(file);
     }
-  
-    // Export text function
-function exportTxt() {
-  const form = document.getElementById('metadataForm');
-  if (!form.checkValidity()) {
-    updateStatus('Harap isi judul buku dan penulis');
-    return;
-  }
 
-  const text = document.getElementById('editor').value;
-  if (!text.trim()) {
-    updateStatus('Tidak ada teks untuk diekspor');
-    return;
-  }
-
-  // Collect metadata
-  const metadata = {
-    bookTitle: document.getElementById('bookTitle').value,
-    author: document.getElementById('author').value,
-    author_alias: document.getElementById('author_alias').value,
-    editor: document.getElementById('editor').value,
-    publisher: document.getElementById('publisher').value,
-    publicationLocation: document.getElementById('publicationLocation').value,
-    publicationYear: document.getElementById('publicationYear').value,
-    publicationYearHijri: document.getElementById('publicationYearHijri').value,
-    chapter: document.getElementById('chapter').value,
-    subchapter: document.getElementById('subchapter').value,
-    page: document.getElementById('page').value,
-    bookVolume: document.getElementById('bookVolume').value
-  };
-
-  // Format metadata as YAML frontmatter
-  const metadataText = [
-    `---`,
-    `book_title: ${metadata.bookTitle}`,
-    `author: ${metadata.author}`,
-    metadata.author_alias && `author_alias: ${metadata.author_alias}`,
-    metadata.editor && `editor: ${metadata.editor}`,
-    metadata.publisher && `publisher: ${metadata.publisher}`,
-    metadata.publicationLocation && `publication_location: ${metadata.publicationLocation}`,
-    metadata.publicationYear && `publication_year: ${metadata.publicationYear}`,
-    metadata.publicationYearHijri && `publication_year_hijri: ${metadata.publicationYearHijri}`,
-    metadata.chapter && `chapter: ${metadata.chapter}`,
-    metadata.subchapter && `subchapter: ${metadata.subchapter}`,
-    metadata.page && `page: ${metadata.page}`,
-    metadata.bookVolume && `book_volume: ${metadata.bookVolume}`,
-    `---\n`
-  ].filter(Boolean).join('\n');
-
-  const fullText = metadataText + text;
-  const blob = new Blob([fullText], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${metadata.bookTitle.toLowerCase().replace(/\s+/g, '-')}-${metadata.page}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-
-  // Clear autosave after successful export
-  localStorage.removeItem('metadata');
-  updateStatus('Berkas berhasil diekspor');
-}
+    function exportTxt() {
       const form = document.getElementById('metadataForm');
       if (!form.checkValidity()) {
-        updateStatus('Harap isi judul buku dan penulis');
+        updateStatus('Please fill in the book title and author');
         return;
       }
-  
-      const text = document.getElementById('editor').value;
+
+      const text = document.getElementById('texteditor').value;
       if (!text.trim()) {
-        updateStatus('Tidak ada teks untuk diekspor');
+        updateStatus('No text to export');
         return;
       }
-  
-      // Collect metadata
-      const metadata = {
-        bookTitle: document.getElementById('bookTitle').value,
-        author: document.getElementById('author').value,
-        editor: document.getElementById('editor').value,
-        publisher: document.getElementById('publisher').value,
-        publicationLocation: document.getElementById('publicationLocation').value,
-        publicationYear: document.getElementById('publicationYear').value,
-        chapter: document.getElementById('chapter').value,
-        subchapter: document.getElementById('subchapter').value,
-        page: document.getElementById('page').value
-      };
-  
-      // Format metadata as YAML frontmatter
-      const metadataText = [
-        `---`,
-        `book_title: ${metadata.bookTitle}`,
-        `author: ${metadata.author}`,
-        metadata.editor && `editor: ${metadata.editor}`,
-        metadata.publisher && `publisher: ${metadata.publisher}`,
-        metadata.publicationLocation && `publication_location: ${metadata.publicationLocation}`,
-        metadata.publicationYear && `publication_year: ${metadata.publicationYear}`,
-        metadata.chapter && `chapter: ${metadata.chapter}`,
-        metadata.subchapter && `subchapter: ${metadata.subchapter}`,
-        metadata.page && `page: ${metadata.page}`,
-        `---\n`
-      ].filter(Boolean).join('\n');
-  
-      const fullText = metadataText + text;
+
+      const metadata = {};
+      form.querySelectorAll('input').forEach(input => {
+        if (input.value) {
+          metadata[input.id] = input.value;
+        }
+      });
+
+      const metadataText = ['---'];
+      for (const [key, value] of Object.entries(metadata)) {
+        metadataText.push(`${key}: ${value}`);
+      }
+      metadataText.push('---\n');
+
+      const fullText = metadataText.join('\n') + text;
       const blob = new Blob([fullText], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${metadata.bookTitle.toLowerCase().replace(/\s+/g, '-')}-${metadata.page}.txt`;
+      a.download = `${metadata.bookTitle.toLowerCase().replace(/\s+/g, '-')}-${metadata.page || 'unknown'}.txt`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-  
-      // Clear autosave after successful export
+
       localStorage.removeItem('metadata');
-      updateStatus('Berkas berhasil diekspor');
+      updateStatus('File exported successfully');
     }
-  
-    // Save metadata to localStorage
-function saveMetadata() {
-  const metadata = {
-    bookTitle: document.getElementById('bookTitle').value,
-    author: document.getElementById('author').value,
-    author_alias: document.getElementById('author_alias').value,
-    editor: document.getElementById('editor').value,
-    publisher: document.getElementById('publisher').value,
-    publicationLocation: document.getElementById('publicationLocation').value,
-    publicationYear: document.getElementById('publicationYear').value,
-    publicationYearHijri: document.getElementById('publicationYearHijri').value,
-    chapter: document.getElementById('chapter').value,
-    subchapter: document.getElementById('subchapter').value,
-    page: document.getElementById('page').value,
-    bookVolume: document.getElementById('bookVolume').value
-  };
-  localStorage.setItem('metadata', JSON.stringify(metadata));
-}
 
-// Load metadata from localStorage
-function loadMetadata() {
-  const savedMetadata = localStorage.getItem('metadata');
-  if (savedMetadata) {
-    const metadata = JSON.parse(savedMetadata);
-    document.getElementById('bookTitle').value = metadata.bookTitle || '';
-    document.getElementById('author').value = metadata.author || '';
-    document.getElementById('author_alias').value = metadata.author_alias || '';
-    document.getElementById('editor').value = metadata.editor || '';
-    document.getElementById('publisher').value = metadata.publisher || '';
-    document.getElementById('publicationLocation').value = metadata.publicationLocation || '';
-    document.getElementById('publicationYear').value = metadata.publicationYear || '';
-    document.getElementById('publicationYearHijri').value = metadata.publicationYearHijri || '';
-    document.getElementById('chapter').value = metadata.chapter || '';
-    document.getElementById('subchapter').value = metadata.subchapter || '';
-    document.getElementById('page').value = metadata.page || '';
-    document.getElementById('bookVolume').value = metadata.bookVolume || '';
-  }
-}
+    function saveMetadata() {
+      const metadata = {};
+      document.querySelectorAll('.metadata-form input').forEach(input => {
+        metadata[input.id] = input.value;
+      });
+      localStorage.setItem('metadata', JSON.stringify(metadata));
+    }
 
+    function loadMetadata() {
       const savedMetadata = localStorage.getItem('metadata');
       if (savedMetadata) {
         const metadata = JSON.parse(savedMetadata);
-        document.getElementById('bookTitle').value = metadata.bookTitle || '';
-        document.getElementById('author').value = metadata.author || '';
-        document.getElementById('editor').value = metadata.editor || '';
-        document.getElementById('publisher').value = metadata.publisher || '';
-        document.getElementById('publicationLocation').value = metadata.publicationLocation || '';
-        document.getElementById('publicationYear').value = metadata.publicationYear || '';
-        document.getElementById('chapter').value = metadata.chapter || '';
-        document.getElementById('subchapter').value = metadata.subchapter || '';
-        document.getElementById('page').value = metadata.page || '';
+        Object.keys(metadata).forEach(key => {
+          const input = document.getElementById(key);
+          if (input) {
+            input.value = metadata[key] || '';
+          }
+        });
       }
     }
-  
-    // Add autosave functionality
+
     document.querySelectorAll('.metadata-form input').forEach(input => {
       input.addEventListener('input', saveMetadata);
     });
-  
-    // Load metadata when the page loads
+
     window.addEventListener('load', loadMetadata);
-  
-    // Update status function
+
     function updateStatus(message) {
       const status = document.getElementById('status');
       status.textContent = message;
@@ -566,8 +449,12 @@ function loadMetadata() {
         status.textContent = '';
       }, 3000);
     }
+
+    document.getElementById('pdfFile').addEventListener('change', function(event) {
+      loadPDF(event.target.files[0]);
+    });
   </script>
-  
+
 </body>
 
 </html>
